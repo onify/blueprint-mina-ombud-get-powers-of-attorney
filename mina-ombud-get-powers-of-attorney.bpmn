@@ -1,0 +1,414 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" xmlns:color="http://www.omg.org/spec/BPMN/non-normative/color/1.0" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_0i1tzjs" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.14.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.19.0">
+  <bpmn:process id="mina-ombud-get-powers-of-attorney" name="Onify Blueprint: Get powers of attorney data from Mina Ombud (Bolagsverket)" isExecutable="true" camunda:historyTimeToLive="180">
+    <bpmn:startEvent id="start" name="Start">
+      <bpmn:outgoing>Flow_184rd8d</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="generateAccessToken" name="Get access token">
+      <bpmn:extensionElements>
+        <camunda:connector>
+          <camunda:inputOutput>
+            <camunda:inputParameter name="form">
+              <camunda:map>
+                <camunda:entry key="scope">user:self</camunda:entry>
+                <camunda:entry key="grant_type">client_credentials</camunda:entry>
+              </camunda:map>
+            </camunda:inputParameter>
+            <camunda:inputParameter name="responseType">json</camunda:inputParameter>
+            <camunda:inputParameter name="method">POST</camunda:inputParameter>
+            <camunda:inputParameter name="headers">
+              <camunda:map>
+                <camunda:entry key="Content-Type">application/x-www-form-urlencoded</camunda:entry>
+                <camunda:entry key="Authorization">${content.input.Authorization}</camunda:entry>
+              </camunda:map>
+            </camunda:inputParameter>
+            <camunda:inputParameter name="url">${environment.output.settings._bolagsverket_mina_ombud_token_url}</camunda:inputParameter>
+          </camunda:inputOutput>
+          <camunda:connectorId>httpRequest</camunda:connectorId>
+        </camunda:connector>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="Authorization">
+            <camunda:script scriptFormat="js">next(null, `Basic ${Buffer.from(`${environment.output.settings._bolagsverket_mina_ombud_client_id}:${environment.output.settings._bolagsverket_mina_ombud_client_secret}`).toString('base64')}`);</camunda:script>
+          </camunda:inputParameter>
+          <camunda:outputParameter name="accessToken">${content.output.body.access_token}</camunda:outputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_07urg0z</bpmn:incoming>
+      <bpmn:outgoing>Flow_173nfk0</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_184rd8d" sourceRef="start" targetRef="getSettings" />
+    <bpmn:serviceTask id="getSettings" name="Get settings">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="state">
+            <camunda:script scriptFormat="js">next(null, {name: content.name, id: content.id});</camunda:script>
+          </camunda:inputParameter>
+          <camunda:outputParameter name="state">
+            <camunda:script scriptFormat="js">next(null, {id: content.id, result: {done: true}});</camunda:script>
+          </camunda:outputParameter>
+          <camunda:outputParameter name="settings">${content.output.body}</camunda:outputParameter>
+        </camunda:inputOutput>
+        <camunda:connector>
+          <camunda:inputOutput>
+            <camunda:inputParameter name="url">/my/config/settings</camunda:inputParameter>
+            <camunda:inputParameter name="query">
+              <camunda:map>
+                <camunda:entry key="tag">minaombud</camunda:entry>
+              </camunda:map>
+            </camunda:inputParameter>
+          </camunda:inputOutput>
+          <camunda:connectorId>onifyElevatedApiRequest</camunda:connectorId>
+        </camunda:connector>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_184rd8d</bpmn:incoming>
+      <bpmn:outgoing>Flow_07urg0z</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_07urg0z" sourceRef="getSettings" targetRef="generateAccessToken" />
+    <bpmn:sequenceFlow id="Flow_173nfk0" sourceRef="generateAccessToken" targetRef="getIdToken" />
+    <bpmn:serviceTask id="searchPermissions" name="Search user permissions">
+      <bpmn:extensionElements>
+        <camunda:connector>
+          <camunda:inputOutput>
+            <camunda:inputParameter name="url">https://fullmakt-test.minaombud.se/dfm/formedlare/v2/sok/behorigheter</camunda:inputParameter>
+            <camunda:inputParameter name="headers">
+              <camunda:map>
+                <camunda:entry key="Authorization">Bearer ${environment.output.accessToken}</camunda:entry>
+                <camunda:entry key="Content-Type">application/json</camunda:entry>
+                <camunda:entry key="x-request-id">${content.input.RequestId}</camunda:entry>
+                <camunda:entry key="x-service-name">${content.input.ServiceName}</camunda:entry>
+                <camunda:entry key="x-id-token">${environment.output.idToken}</camunda:entry>
+              </camunda:map>
+            </camunda:inputParameter>
+            <camunda:inputParameter name="responseType">json</camunda:inputParameter>
+            <camunda:inputParameter name="method">POST</camunda:inputParameter>
+            <camunda:inputParameter name="body">
+              <camunda:script scriptFormat="js">const body = {
+	tredjeman: content.input.ThirdParty,
+    fullmaktshavare: { id: content.input.PersonalNumber, typ: "pnr" },
+    fullmaktsgivarroll: ["ORGANISATION"],
+    page: { page: 0, size: 100 }
+}
+next(null,JSON.stringify(body));</camunda:script>
+            </camunda:inputParameter>
+          </camunda:inputOutput>
+          <camunda:connectorId>httpRequest</camunda:connectorId>
+        </camunda:connector>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="state">
+            <camunda:script scriptFormat="js">next(null, {name: content.name, id: content.id});</camunda:script>
+          </camunda:inputParameter>
+          <camunda:inputParameter name="RequestId">
+            <camunda:script scriptFormat="js">function generateGUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = (Math.random() * 16) | 0,
+        v = c === 'x' ? r : (r &amp; 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+next(null,generateGUID());</camunda:script>
+          </camunda:inputParameter>
+          <camunda:inputParameter name="ServiceName">Onify</camunda:inputParameter>
+          <camunda:inputParameter name="ThirdParty">2120000829</camunda:inputParameter>
+          <camunda:inputParameter name="PersonalNumber">198602262381</camunda:inputParameter>
+          <camunda:outputParameter name="state">
+            <camunda:script scriptFormat="js">next(null, {id: content.id, result: {done: true}});</camunda:script>
+          </camunda:outputParameter>
+          <camunda:outputParameter name="userPermissions">
+            <camunda:script scriptFormat="js">function extractAndFlattenUserPermissions(data) {
+	let results = [];
+
+	data.forEach(contextItem =&gt; {
+		let authorizationMap = {};
+
+		contextItem.behorigheter.forEach(authorization =&gt; {
+			const powerOfAttorney = authorization.fullmakt;
+			if (!authorizationMap[powerOfAttorney]) {
+				authorizationMap[powerOfAttorney] = {
+					fullmaktsgivare: contextItem.fullmaktsgivare,
+					id: powerOfAttorney,
+					koder: []
+				};
+			}
+
+			authorizationMap[powerOfAttorney].koder.push(authorization.kod);
+		});
+
+		Object.values(authorizationMap).forEach(item =&gt; results.push(item));
+	});
+
+	return results;
+}
+next(null, extractAndFlattenUserPermissions(content.output.body.kontext));</camunda:script>
+          </camunda:outputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0clm3le</bpmn:incoming>
+      <bpmn:outgoing>Flow_0asvixx</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="getIdToken" name="Get id token">
+      <bpmn:extensionElements>
+        <camunda:connector>
+          <camunda:inputOutput>
+            <camunda:inputParameter name="method">POST</camunda:inputParameter>
+            <camunda:inputParameter name="headers">
+              <camunda:map>
+                <camunda:entry key="Content-Type">text/plain</camunda:entry>
+              </camunda:map>
+            </camunda:inputParameter>
+            <camunda:inputParameter name="url">https://fullmakt-test.minaombud.se/sample/user</camunda:inputParameter>
+            <camunda:inputParameter name="body">${content.input.PersonalNumber}</camunda:inputParameter>
+          </camunda:inputOutput>
+          <camunda:connectorId>httpRequest</camunda:connectorId>
+        </camunda:connector>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="PersonalNumber">198602262381</camunda:inputParameter>
+          <camunda:outputParameter name="idToken">${content.output.body}</camunda:outputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_173nfk0</bpmn:incoming>
+      <bpmn:outgoing>Flow_0clm3le</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_0clm3le" sourceRef="getIdToken" targetRef="searchPermissions" />
+    <bpmn:sequenceFlow id="Flow_0asvixx" sourceRef="searchPermissions" targetRef="searchPowersOfAttorney" />
+    <bpmn:serviceTask id="searchPowersOfAttorney" name="Search powers of attorney">
+      <bpmn:extensionElements>
+        <camunda:connector>
+          <camunda:inputOutput>
+            <camunda:inputParameter name="url">https://fullmakt-test.minaombud.se/dfm/formedlare/v2/sok/fullmakter</camunda:inputParameter>
+            <camunda:inputParameter name="headers">
+              <camunda:map>
+                <camunda:entry key="Authorization">Bearer ${environment.output.accessToken}</camunda:entry>
+                <camunda:entry key="Content-Type">application/json</camunda:entry>
+                <camunda:entry key="x-request-id">${content.input.RequestId}</camunda:entry>
+                <camunda:entry key="x-service-name">${content.input.ServiceName}</camunda:entry>
+                <camunda:entry key="x-id-token">${environment.output.idToken}</camunda:entry>
+              </camunda:map>
+            </camunda:inputParameter>
+            <camunda:inputParameter name="responseType">json</camunda:inputParameter>
+            <camunda:inputParameter name="method">POST</camunda:inputParameter>
+            <camunda:inputParameter name="body">
+              <camunda:script scriptFormat="js">const body = {
+    fullmaktshavare: { id: content.input.PersonalNumber, typ: "pnr" },
+    page: { page: 0, size: 100 }
+}
+next(null,JSON.stringify(body));</camunda:script>
+            </camunda:inputParameter>
+          </camunda:inputOutput>
+          <camunda:connectorId>httpRequest</camunda:connectorId>
+        </camunda:connector>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="state">
+            <camunda:script scriptFormat="js">next(null, {name: content.name, id: content.id});</camunda:script>
+          </camunda:inputParameter>
+          <camunda:inputParameter name="RequestId">
+            <camunda:script scriptFormat="js">function generateGUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = (Math.random() * 16) | 0,
+        v = c === 'x' ? r : (r &amp; 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+next(null,generateGUID());</camunda:script>
+          </camunda:inputParameter>
+          <camunda:inputParameter name="ServiceName">Onify</camunda:inputParameter>
+          <camunda:inputParameter name="ThirdParty">2120000829</camunda:inputParameter>
+          <camunda:inputParameter name="PersonalNumber">198602262381</camunda:inputParameter>
+          <camunda:outputParameter name="state">
+            <camunda:script scriptFormat="js">next(null, {id: content.id, result: {done: true}});</camunda:script>
+          </camunda:outputParameter>
+          <camunda:outputParameter name="powersOfAttorney">${content.output.body.fullmakter}</camunda:outputParameter>
+          <camunda:outputParameter name="debug">
+            <camunda:script scriptFormat="js">console.log(JSON.stringify(content.output.body.fullmakter,null,2));
+next();</camunda:script>
+          </camunda:outputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0asvixx</bpmn:incoming>
+      <bpmn:outgoing>Flow_0sssx3w</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_0sssx3w" sourceRef="searchPowersOfAttorney" targetRef="mergeInformation" />
+    <bpmn:sequenceFlow id="Flow_01ew11m" sourceRef="mergeInformation" targetRef="debugLog" />
+    <bpmn:scriptTask id="mergeInformation" name="Merge information" scriptFormat="js" camunda:resultVariable="activeUserPowersOfAttorney">
+      <bpmn:extensionElements />
+      <bpmn:incoming>Flow_0sssx3w</bpmn:incoming>
+      <bpmn:outgoing>Flow_01ew11m</bpmn:outgoing>
+      <bpmn:script>function mergeArrays(array1, array2) {
+	return array1.map(item1 =&gt; {
+		const matchingItem = array2.find(item2 =&gt; item2.id === item1.id);
+		return matchingItem ? { ...item1, ...matchingItem } : { ...item1 };
+	});
+}
+next(null,mergeArrays(environment.output.userPermissions,environment.output.powersOfAttorney));</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:scriptTask id="debugLog" name="Log" scriptFormat="js">
+      <bpmn:extensionElements />
+      <bpmn:incoming>Flow_01ew11m</bpmn:incoming>
+      <bpmn:outgoing>Flow_02zgqos</bpmn:outgoing>
+      <bpmn:script>console.log(JSON.stringify(environment.output.activeUserPowersOfAttorney,null,2));
+next();</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="Flow_02zgqos" sourceRef="debugLog" targetRef="end" />
+    <bpmn:endEvent id="end" name="End">
+      <bpmn:incoming>Flow_02zgqos</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:textAnnotation id="TextAnnotation_06ml5ro">
+      <bpmn:text>Get settings for Mina Ombud</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_142cbmm" sourceRef="getSettings" targetRef="TextAnnotation_06ml5ro" />
+    <bpmn:textAnnotation id="TextAnnotation_0j0kljk">
+      <bpmn:text>Get access token based on settings</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_10w1mat" sourceRef="generateAccessToken" targetRef="TextAnnotation_0j0kljk" />
+    <bpmn:textAnnotation id="TextAnnotation_0rj6jy3">
+      <bpmn:text>Get Id token for user, change input if needed</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_1condub" sourceRef="getIdToken" targetRef="TextAnnotation_0rj6jy3" />
+    <bpmn:textAnnotation id="TextAnnotation_0u3o9wa">
+      <bpmn:text>Get active powers of attorney for user, change input if need</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_0zabpto" sourceRef="searchPermissions" targetRef="TextAnnotation_0u3o9wa" />
+    <bpmn:textAnnotation id="TextAnnotation_1pjhykq">
+      <bpmn:text>Get metadata for powers of attorney, change input if need</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_07upnbu" sourceRef="searchPowersOfAttorney" targetRef="TextAnnotation_1pjhykq" />
+    <bpmn:textAnnotation id="TextAnnotation_06quf3f">
+      <bpmn:text>Merge information for active powers of attorney</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_1s65lmn" sourceRef="mergeInformation" targetRef="TextAnnotation_06quf3f" />
+    <bpmn:textAnnotation id="TextAnnotation_1go11ew">
+      <bpmn:text>Log output to console</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_1xot7vp" sourceRef="debugLog" targetRef="TextAnnotation_1go11ew" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="mina-ombud-get-powers-of-attorney">
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="start" bioc:stroke="#43a047" bioc:fill="#c8e6c9" color:background-color="#c8e6c9" color:border-color="#43a047">
+        <dc:Bounds x="179" y="219" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="185" y="262" width="25" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1mbrrq0_di" bpmnElement="generateAccessToken">
+        <dc:Bounds x="406" y="197" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0tdjxja_di" bpmnElement="getSettings">
+        <dc:Bounds x="258" y="197" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1ti155t_di" bpmnElement="searchPermissions">
+        <dc:Bounds x="702" y="197" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_1je3zzf" bpmnElement="getIdToken">
+        <dc:Bounds x="554" y="197" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_0wqci4t" bpmnElement="searchPowersOfAttorney">
+        <dc:Bounds x="850" y="197" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1nn8dlt_di" bpmnElement="mergeInformation">
+        <dc:Bounds x="998" y="197" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_1vb9tdl" bpmnElement="debugLog">
+        <dc:Bounds x="1146" y="197" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_06ml5ro_di" bpmnElement="TextAnnotation_06ml5ro">
+        <dc:Bounds x="320" y="100" width="160" height="41" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_0j0kljk_di" bpmnElement="TextAnnotation_0j0kljk">
+        <dc:Bounds x="470" y="93" width="100" height="55" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_0rj6jy3_di" bpmnElement="TextAnnotation_0rj6jy3">
+        <dc:Bounds x="600" y="93" width="100" height="55" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_0u3o9wa_di" bpmnElement="TextAnnotation_0u3o9wa">
+        <dc:Bounds x="740" y="79" width="100" height="84" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_1pjhykq_di" bpmnElement="TextAnnotation_1pjhykq">
+        <dc:Bounds x="870" y="79" width="100" height="84" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_06quf3f_di" bpmnElement="TextAnnotation_06quf3f">
+        <dc:Bounds x="1030" y="86" width="100" height="70" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_1go11ew_di" bpmnElement="TextAnnotation_1go11ew">
+        <dc:Bounds x="1200" y="100" width="100" height="41" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0gw83v8_di" bpmnElement="end" bioc:stroke="#e53935" bioc:fill="#ffcdd2" color:background-color="#ffcdd2" color:border-color="#e53935">
+        <dc:Bounds x="1292" y="219" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1300" y="262" width="20" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_184rd8d_di" bpmnElement="Flow_184rd8d">
+        <di:waypoint x="215" y="237" />
+        <di:waypoint x="258" y="237" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07urg0z_di" bpmnElement="Flow_07urg0z">
+        <di:waypoint x="358" y="237" />
+        <di:waypoint x="406" y="237" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_173nfk0_di" bpmnElement="Flow_173nfk0">
+        <di:waypoint x="506" y="237" />
+        <di:waypoint x="554" y="237" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0clm3le_di" bpmnElement="Flow_0clm3le">
+        <di:waypoint x="654" y="237" />
+        <di:waypoint x="702" y="237" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0asvixx_di" bpmnElement="Flow_0asvixx">
+        <di:waypoint x="802" y="237" />
+        <di:waypoint x="850" y="237" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0sssx3w_di" bpmnElement="Flow_0sssx3w">
+        <di:waypoint x="950" y="237" />
+        <di:waypoint x="998" y="237" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_01ew11m_di" bpmnElement="Flow_01ew11m">
+        <di:waypoint x="1098" y="237" />
+        <di:waypoint x="1146" y="237" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02zgqos_di" bpmnElement="Flow_02zgqos">
+        <di:waypoint x="1246" y="237" />
+        <di:waypoint x="1292" y="237" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_142cbmm_di" bpmnElement="Association_142cbmm">
+        <di:waypoint x="328" y="197" />
+        <di:waypoint x="357" y="141" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_10w1mat_di" bpmnElement="Association_10w1mat">
+        <di:waypoint x="476" y="197" />
+        <di:waypoint x="500" y="148" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_1condub_di" bpmnElement="Association_1condub">
+        <di:waypoint x="618" y="197" />
+        <di:waypoint x="636" y="148" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_0zabpto_di" bpmnElement="Association_0zabpto">
+        <di:waypoint x="763" y="197" />
+        <di:waypoint x="772" y="163" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_07upnbu_di" bpmnElement="Association_07upnbu">
+        <di:waypoint x="906" y="197" />
+        <di:waypoint x="910" y="163" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_1s65lmn_di" bpmnElement="Association_1s65lmn">
+        <di:waypoint x="1057" y="197" />
+        <di:waypoint x="1067" y="156" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_1xot7vp_di" bpmnElement="Association_1xot7vp">
+        <di:waypoint x="1214" y="197" />
+        <di:waypoint x="1238" y="141" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
